@@ -155,11 +155,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AlgoritmoTomasulo.cpp" />
+    <ClCompile Include="Helper.cpp" />
     <ClCompile Include="Instruction.cpp" />
     <ClCompile Include="RegisterStatus.cpp" />
     <ClCompile Include="ReservationStation.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Helper.h" />
     <ClInclude Include="Instruction.h" />
     <ClInclude Include="RegisterStatus.h" />
     <ClInclude Include="ReservationStation.h" />

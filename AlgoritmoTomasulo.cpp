@@ -4,6 +4,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+
+#include "Helper.h"
 #include "ReservationStation.h"
 #include "RegisterStatus.h"
 #include "Instruction.h"
@@ -11,9 +13,9 @@
 using namespace std;
 
 // Numero de Reservation Stations de ADD
-const int NumAddReservationStation = 1;
+const int NumAddReservationStation = 3;
 // Numero de Reservation Stations de Mult
-const int NumMultReservationStation = 2;
+const int NumMultReservationStation = 4;
 // Numero de Reservation Stations de Div
 const int NumDivReservationStation = 2;
 
@@ -24,6 +26,11 @@ enum Operation {
     MultOp = 2,
     DivOp = 3,
 };
+
+struct OpTime {
+    int startTime;
+    int endTime;
+} OpTime;
 
 // Latencia da op de ADD
 const int AddLatency = 4;
@@ -50,11 +57,11 @@ int CurrentInstIssue = 0;
 // Registrador zero
 const int RegZero = 5000;
 // Status de registrador vazio
-const int RegStatusEmpty = 1;
+const int RegStatusEmpty = 1000;
 // Status de Operador Disponivel
-const int OperandAvailable = 1;
+const int OperandAvailable = 1001;
 // Status de Operador Iniciado
-const int OperandInit = 1;
+const int OperandInit = 1002;
 
 int ISSUE(vector<Instruction>& Instructions,
           vector<ReservationStation>& ResStat,
@@ -69,18 +76,15 @@ void WRITEBACK(vector<Instruction>& Inst,
                vector<RegisterStatus>& RegStat,
                vector<int>& Register);
 
+// Seta os tempos de cada operacao
+void SetOpTimes(struct OpTime &AddTime, struct OpTime &SubTime, struct OpTime &MultTime, struct OpTime &DivTime);
+// Faz a operacao da Reservation Station
+void execOperation(ReservationStation &rs, Operation op);
+// Reseta os valores da Reservation Station quando for concluida sua operacao
+void resetReservationStation(ReservationStation &rs);
 // Tratar a linha de instrucao do txt
 Instruction parseLine(string line);
-// Printar os status dos registradores
-void printRegisterStatus(vector<RegisterStatus> );
-// Printar as reservation stations
-void printReservationStations(vector<ReservationStation> );
-// Printar os registradores
-void printRegisters(vector<int> );
-// Printar as instrucoes
-void printInstructions(vector<Instruction> );
-// Printar a tabela de clock
-void printTimingTable(vector<Instruction> );
+
 
 int main(int argc, char* argv[])
 {
@@ -109,12 +113,12 @@ int main(int argc, char* argv[])
     // NumAddReservationStation = 1
     // NumMultReservationStation = 2
     // NumDivReservationStation = 2
-    ReservationStation ADD1(AddOp, OperandInit);
-    ReservationStation MULT1(MultOp, OperandInit), MULT2(MultOp, OperandInit);
+    ReservationStation ADD1(AddOp, OperandInit), ADD2(AddOp, OperandInit), ADD3(AddOp, OperandInit);
+    ReservationStation MULT1(MultOp, OperandInit), MULT2(MultOp, OperandInit), MULT3(MultOp, OperandInit), MULT4(MultOp, OperandInit);
     ReservationStation DIV1(DivOp, OperandInit), DIV2(DivOp, OperandInit);
 
     // Vetor das reservation stations
-    vector<ReservationStation> ResStation = {ADD1, MULT1, MULT2, DIV1, DIV2};
+    vector<ReservationStation> ResStation = {ADD1, ADD2, ADD3, MULT1, MULT2, MULT3, MULT4, DIV1, DIV2};
 
     // Status do registradores
     RegisterStatus F0(RegStatusEmpty), F1(RegStatusEmpty),
@@ -133,10 +137,11 @@ int main(int argc, char* argv[])
 
     // Printar o estado inicial do sistema
     cout << "INITIAL VALUES:" << endl;
-    printInstructions(inst);
-    printReservationStations(ResStation);
-    printRegisters(Register);
-    printRegisterStatus(RegisterStatus);
+    
+    Helper::printInstructions(inst);
+    Helper::printReservationStations(ResStation);
+    Helper::printRegisters(Register);
+    Helper::printRegisterStatus(RegisterStatus);
     cout << endl;
 
     // Execucao das instrucoes
@@ -147,8 +152,8 @@ int main(int argc, char* argv[])
         EXECUTE(inst, ResStation, RegisterStatus, Register);
         WRITEBACK(inst, ResStation, RegisterStatus, Register);
 
-        printRegisters(Register);
-        printTimingTable(inst);
+        Helper::printRegisters(Register);
+        Helper::printTimingTable(inst, Clock);
         cout << endl;
 
         Completed = false;
@@ -173,19 +178,13 @@ int ISSUE(vector<Instruction>& Instructions, vector<ReservationStation>& Registr
 
     r = Instructions[CurrentInstIssue].op;
 
-    int AddStart = NumAddReservationStation - NumAddReservationStation;
-    int AddEnd = NumAddReservationStation;
-    int SubStart = NumAddReservationStation - NumAddReservationStation;
-    int SubEnd = NumAddReservationStation;
-    int MultStart = NumAddReservationStation;
-    int MultEnd = NumAddReservationStation + NumMultReservationStation;
-    int DivStart = NumAddReservationStation + NumMultReservationStation;
-    int DivEnd = NumAddReservationStation + NumMultReservationStation + NumDivReservationStation;
+    struct OpTime AddTime, SubTime, MultTime, DivTime;
+    SetOpTimes(AddTime, SubTime, MultTime, DivTime);
 
     switch (r) {
         // Issue da operacao ADD
         case AddOp:
-            for (int i = AddStart; i < AddEnd; i++) {
+            for (int i = AddTime.startTime; i < AddTime.endTime; i++) {
                 if (!RegistrationStations[i].busy) {
                     r = i;
                     CurrentInstIssue++;
@@ -193,7 +192,6 @@ int ISSUE(vector<Instruction>& Instructions, vector<ReservationStation>& Registr
                     rsFree = true;
                     break;
                 }
-                
             }
 
             if (!rsFree) {
@@ -203,7 +201,7 @@ int ISSUE(vector<Instruction>& Instructions, vector<ReservationStation>& Registr
 
         // Issue da operacao SUB
         case SubOp:
-            for (int i = SubStart; i < SubEnd; i++) {
+            for (int i = SubTime.startTime; i < SubTime.endTime; i++) {
                 if (!RegistrationStations[i].busy) {
                     r = i;
                     CurrentInstIssue++;
@@ -211,7 +209,6 @@ int ISSUE(vector<Instruction>& Instructions, vector<ReservationStation>& Registr
                     rsFree = true;
                     break;
                 }
-                
             }
 
             if (!rsFree) {
@@ -221,15 +218,14 @@ int ISSUE(vector<Instruction>& Instructions, vector<ReservationStation>& Registr
 
         // Issue da operacao MULT
         case MultOp:
-            for (int i = MultStart; i < MultEnd; i++) {
+            for (int i = MultTime.startTime; i < MultTime.endTime; i++) {
                 if (!RegistrationStations[i].busy) {
                     r = i;
                     CurrentInstIssue++;
                     RegistrationStations[i].op = MultOp;
                     rsFree = true;
                     break;
-                }
-                    
+                }  
             }
 
             if (!rsFree) {
@@ -239,15 +235,14 @@ int ISSUE(vector<Instruction>& Instructions, vector<ReservationStation>& Registr
 
         // Issue da operacao DIV
         case DivOp:
-            for (int i = DivStart; i < DivEnd; i++) {
+            for (int i = DivTime.startTime; i < DivTime.endTime; i++) {
                 if (!RegistrationStations[i].busy) {
                     r = i;
                     CurrentInstIssue++;
                     RegistrationStations[i].op = DivOp;
                     rsFree = true;
                     break;
-                }
-                        
+                }      
             }
 
             if (!rsFree) {
@@ -300,49 +295,28 @@ void EXECUTE(vector<Instruction>& INST, vector<ReservationStation>& RESSTATION, 
                         // Execucao da operacao ADD
                         case AddOp:
                             if(RESSTATION[r].latency == AddLatency){
-                                RESSTATION[r].result = RESSTATION[r].Vj + RESSTATION[r].Vk;
-                                
-                                RESSTATION[r].completed = true;
-                                RESSTATION[r].latency = 0;
-                                
+                                execOperation(RESSTATION[r], AddOp);
                                 INST[RESSTATION[r].instNum].execClockEnd = Clock;
-                                
-                                RESSTATION[r].issueLatency = 0;
                             }
                             break;
                         // Execucao da operacao SUB
                         case SubOp:
                             if(RESSTATION[r].latency == AddLatency){
-                                RESSTATION[r].result = RESSTATION[r].Vj - RESSTATION[r].Vk;
-                                RESSTATION[r].completed = true;
-                                RESSTATION[r].latency = 0;
-                                
+                                execOperation(RESSTATION[r], SubOp);
                                 INST[RESSTATION[r].instNum].execClockEnd = Clock;
-                                
-                                RESSTATION[r].issueLatency = 0;
                             }
                         // Execucao da operacao MULT
                         case MultOp:
                             if(RESSTATION[r].latency == MultLatency){
-                                RESSTATION[r].result = RESSTATION[r].Vj * RESSTATION[r].Vk;
-                                RESSTATION[r].completed = true;
-                                RESSTATION[r].latency = 0;
-                                
+                                execOperation(RESSTATION[r], MultOp);
                                 INST[RESSTATION[r].instNum].execClockEnd = Clock;
-                                
-                                RESSTATION[r].issueLatency = 0;
                             }
 
                         // Execucao da operacao DIV
                         case DivOp:
                             if(RESSTATION[r].latency == DivLatency){
-                                RESSTATION[r].result = RESSTATION[r].Vj / RESSTATION[r].Vk;
-                                RESSTATION[r].completed = true;
-                                RESSTATION[r].latency = 0;
-                                
+                                execOperation(RESSTATION[r], DivOp);
                                 INST[RESSTATION[r].instNum].execClockEnd = Clock;
-                                
-                                RESSTATION[r].issueLatency = 0;
                             }
                         default:
                             break;
@@ -356,37 +330,31 @@ void EXECUTE(vector<Instruction>& INST, vector<ReservationStation>& RESSTATION, 
 
 void WRITEBACK(vector<Instruction>& INST, vector<ReservationStation>& RESSTATION, vector<RegisterStatus>& REGSTATUS, vector<int>& REG){
     
-    for(int r=0;r<RESSTATION.size();r++){
+    for(int r = 0; r < RESSTATION.size(); r++){
         if(RESSTATION[r].completed){
             if(RESSTATION[r].writebackLatency == WritebackLatency){
                 if(INST[RESSTATION[r].instNum].writebackClock == 0)
                     INST[RESSTATION[r].instNum].writebackClock = Clock;
                 
-                for(int x=0;x < REG.size();x++) {
+                for(int x = 0; x < REG.size();x++) {
                     if (REGSTATUS[x].Qi == r) {
                         REG[x] = RESSTATION[r].result;
                         REGSTATUS[x].Qi = RegStatusEmpty;
                     }
                 }
                 
-                for(int y=0;y<RESSTATION.size();y++){
+                for(int y = 0; y < RESSTATION.size();y++){
                     if(RESSTATION[y].Qj==r){
-                        RESSTATION[y].Vj=RESSTATION[r].result;
-                        RESSTATION[y].Qj=OperandAvailable;
+                        RESSTATION[y].Vj = RESSTATION[r].result;
+                        RESSTATION[y].Qj = OperandAvailable;
                     }
                     if(RESSTATION[y].Qk==r){
-                        RESSTATION[y].Vk=RESSTATION[r].result;
-                        RESSTATION[y].Qk=OperandAvailable;
+                        RESSTATION[y].Vk = RESSTATION[r].result;
+                        RESSTATION[y].Qk = OperandAvailable;
                     }
                 }
-                
-                RESSTATION[r].completed = false;
-                RESSTATION[r].busy = false;
-                RESSTATION[r].Qj = OperandInit;
-                RESSTATION[r].Qk = OperandInit;
-                RESSTATION[r].Vj = 0;
-                RESSTATION[r].Vk = 0;
-                RESSTATION[r].writebackLatency = 0;
+
+                resetReservationStation(RESSTATION[r]);
                 TotalWritebacks++;
             }
             else
@@ -395,89 +363,50 @@ void WRITEBACK(vector<Instruction>& INST, vector<ReservationStation>& RESSTATION
     }
 }
 
-void printRegisterStatus(vector<RegisterStatus> RegisterStatus){
-    cout << "Status dos registradores: " << endl;
-    for(int i = 0; i < RegisterStatus.size(); i++) {
-        cout << RegisterStatus[i].Qi << ' ';
-    }
-    cout << endl;
+void resetReservationStation(ReservationStation& rs) {
+    rs.completed = false;
+    rs.busy = false;
+    rs.Qj = OperandInit;
+    rs.Qk = OperandInit;
+    rs.Vj = 0;
+    rs.Vk = 0;
+    rs.writebackLatency = 0;
 }
 
-void printReservationStations(vector<ReservationStation> ReservationStations){
-    for(int i = 0; i < ReservationStations.size(); i++) {
-        cout << "RS #: " << i << "  Busy: " << ReservationStations[i].busy << "  op: "<<
-                ReservationStations[i].op << "  Vj: " << ReservationStations[i].Vj << "  Vk: " <<
-                ReservationStations[i].Vk << "  Qj: " << ReservationStations[i].Qj << "  Qk: " <<
-                ReservationStations[i].Qk << endl;
+void execOperation(ReservationStation& rs, Operation op) {
+    switch (op) {
+        case AddOp:
+            rs.result = rs.Vj + rs.Vk;
+            break;
+        case SubOp:
+            rs.result = rs.Vj - rs.Vk;
+            break;
+        case MultOp:
+            rs.result = rs.Vj * rs.Vk;
+            break;
+        case DivOp:
+            rs.result = rs.Vj / rs.Vk;
+            break;
+        default:
+            break;
     }
+    rs.completed = true;
+    rs.latency = 0;
+    rs.issueLatency = 0;
 }
 
-void printRegisters(vector<int> Registers){
-    cout << "Register Content:" << endl;
-    for(int i = 0; i < Registers.size(); i++) {
-        cout << Registers[i] << ' ';
-    }
-    cout << endl;
-}
-void printInstructions(vector<Instruction> IV){
-    for(int i=0; i<IV.size(); i++) {
-        cout << "Instruction #: " << i << "  Operation: " <<
-                IV[i].op << "  " <<
-                IV[i].rd << " <- " << IV[i].rs << " op " <<
-                IV[i].rt << endl;
-    }
-}
-void printTimingTable(vector<Instruction> INST){
-    string separator = "      ";
-    cout << "Inst" << separator;
-    cout << "Issue" << separator;
-    cout << "Execute" << separator;
-    cout << "WB" << separator;
-    cout << "SystemClock" << endl;
-    cout << "                                          " <<  Clock;
-    cout << endl;
-    cout << separator;
-    cout << endl;
+void SetOpTimes(struct OpTime& AddTime, struct OpTime& SubTime, struct OpTime& MultTime, struct OpTime& DivTime) {
+    AddTime.startTime = NumAddReservationStation - NumAddReservationStation;
+    AddTime.endTime = NumAddReservationStation;
+
+    SubTime.startTime = NumAddReservationStation - NumAddReservationStation;
+    SubTime.endTime = NumAddReservationStation;
+
+    MultTime.startTime = NumAddReservationStation;
+    MultTime.endTime = NumAddReservationStation + NumMultReservationStation;
     
-    for(int i = 0; i < INST.size(); i++){
-        cout << i  << "         ";
-        if (INST[i].issueClock < 10) {
-            cout << INST[i].issueClock  << "          ";
-            cout << INST[i].execClockBegin <<  "-";
-            cout << INST[i].execClockEnd << "          ";
-            cout << INST[i].writebackClock << "          ";
-        } else {
-            cout << INST[i].issueClock  << "         ";
-            cout << INST[i].execClockBegin <<  "-";
-            cout << INST[i].execClockEnd << "        ";
-            cout << INST[i].writebackClock << "        ";
-        }
-        cout << endl;
-    }
+    DivTime.startTime = NumAddReservationStation + NumMultReservationStation;
+    DivTime.endTime = NumAddReservationStation + NumMultReservationStation + NumDivReservationStation;
 }
 
-Instruction parseLine(string line) {
-    std::istringstream iss(line);
-    std::string op, f1, f2, f3;
-
-    // ADD F1, F2, F3
-    iss >> op >> f1 >> f2 >> f3;
-
-    int operand1 = std::stoi(f1.substr(1)); // F1 -> 1
-    int operand2 = std::stoi(f2.substr(1)); // F2 -> 2
-    int operand3 = std::stoi(f3.substr(1)); // F3 -> 3
-
-    Operation operation;
-    if (op == "ADD") {
-        operation = AddOp;
-    } else if (op == "SUB") {
-        operation = SubOp;
-    } else if (op == "MULT") {
-        operation = MultOp;
-    } else if (op == "DIV") {
-        operation = MultOp;
-    }
-
-    return Instruction(operand1, operand2, operand3, operation);
-}
 
