@@ -38,6 +38,12 @@ Além disso, deve-se garantir que o número de registradores do `.txt` e o núme
 
 ## Exemplo de Execução
 
+### Número de Reservation Stations
+
+Add = 1
+Mult = 2
+Div = 2
+
 ### Instruções usadas
 
 | Instruções       |
@@ -49,6 +55,8 @@ Além disso, deve-se garantir que o número de registradores do `.txt` e o núme
 | DIV F11, F12, F6 |
 | MULT F8, F1, F5  |
 | MULT F7, F2, F3  |
+
+Número de RegisterStatus = 12
 
 ### Saída 
 
